@@ -63,26 +63,29 @@ def analyze_code(file_changes, file_name):
         "Authorization": f"Bearer {MISTRAL_API_KEY}"
     }
     
-    system_prompt = """You are an expert software developer conducting code reviews. 
-    Provide concise, actionable feedback focusing on code quality, best practices, and potential improvements. 
-    Format your review in clear sections for positive aspects and suggestions.
-    Focus only on the changed code portions, not the entire file."""
+    system_prompt = """You are an expert software developer conducting code reviews.
+    You will be shown a git patch/diff of code changes.
+    Lines starting with '+' are additions and lines starting with '-' are deletions.
+    ONLY review the specific changes shown in the diff - do not make assumptions about other parts of the code.
+    Provide concise, actionable feedback focusing on code quality, best practices, and potential improvements.
+    Format your review in clear sections for positive aspects and suggestions."""
     
     user_prompt = f"""Review these specific changes in {file_name}:
 
+The following shows the git diff of changes made:
 {file_changes}
 
-Analyze only the changed code for:
+Focus ONLY on analyzing the changed lines (marked with + or -) for:
 1. Good practices and improvements implemented
 2. Potential issues or areas for improvement
 3. Security concerns if any
 4. Performance considerations
 
 Provide your review in this format:
-1. Positive points: [Brief list of good implementations]
-2. Key suggestions: [Prioritized list of improvements]
+1. Positive points: [Brief list of good implementations in the changes]
+2. Key suggestions: [Prioritized list of improvements for the changes]
 3. Code example: [If applicable, show a brief example of suggested improvement]
-4. Summary: [One-line overview of the changes]"""
+4. Summary: [One-line overview of the specific changes made]"""
 
     data = {
         "model": "mistral-large-latest",
@@ -151,8 +154,8 @@ def webhook():
                 
                 # Get only the changed portions using the patch
                 if file.patch:
-                    # Extract the changed code from the patch
-                    changes = f"Changes (patch):\n{file.patch}"
+                    # Format the changes to emphasize the diff
+                    changes = "```diff\n" + file.patch + "\n```"
                 else:
                     print(f"No patch available for {file.filename}")
                     continue
