@@ -15,7 +15,7 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# comment to trigger PR review  2
+# comment to trigger PR review 4
 
 # GitHub App credentials
 GITHUB_APP_ID = os.getenv('GITHUB_APP_ID')
@@ -41,12 +41,7 @@ def verify_webhook(request):
         hashlib.sha256
     ).hexdigest()
     
-    if not hmac.compare_digest(signature, expected_signature):
-        print("❌ Webhook signature mismatch")
-        return False
-
-    print("✅ Webhook signature verified successfully")
-    return True
+    return hmac.compare_digest(signature, expected_signature)
 
 def get_github_client(installation_id):
     if not GITHUB_APP_ID or not GITHUB_PRIVATE_KEY:
