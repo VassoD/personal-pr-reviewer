@@ -16,6 +16,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # this is a comment to trigger PR review 
+# fixed mistral api key in render env variables
 
 # GitHub App credentials
 GITHUB_APP_ID = os.getenv('GITHUB_APP_ID')
