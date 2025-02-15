@@ -15,8 +15,6 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# comment to trigger PR review 4
-
 # GitHub App credentials
 GITHUB_APP_ID = os.getenv('GITHUB_APP_ID')
 GITHUB_PRIVATE_KEY = os.getenv('GITHUB_PRIVATE_KEY')
