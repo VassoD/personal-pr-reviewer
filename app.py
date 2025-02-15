@@ -54,7 +54,7 @@ def get_github_client(installation_id):
     access_token = integration.get_access_token(installation_id).token
     return Github(access_token)
 
-def analyze_code(file_content, file_name):
+def analyze_code(file_changes, file_name):
     if not MISTRAL_API_KEY:
         return "Error: Mistral API key not configured"
         
@@ -65,13 +65,14 @@ def analyze_code(file_content, file_name):
     
     system_prompt = """You are an expert software developer conducting code reviews. 
     Provide concise, actionable feedback focusing on code quality, best practices, and potential improvements. 
-    Format your review in clear sections for positive aspects and suggestions."""
+    Format your review in clear sections for positive aspects and suggestions.
+    Focus only on the changed code portions, not the entire file."""
     
-    user_prompt = f"""Review this code change in {file_name}:
+    user_prompt = f"""Review these specific changes in {file_name}:
 
-{file_content}
+{file_changes}
 
-Analyze the code for:
+Analyze only the changed code for:
 1. Good practices and improvements implemented
 2. Potential issues or areas for improvement
 3. Security concerns if any
@@ -81,7 +82,7 @@ Provide your review in this format:
 1. Positive points: [Brief list of good implementations]
 2. Key suggestions: [Prioritized list of improvements]
 3. Code example: [If applicable, show a brief example of suggested improvement]
-4. Summary: [One-line overview of code quality]"""
+4. Summary: [One-line overview of the changes]"""
 
     data = {
         "model": "mistral-large-latest",
@@ -146,14 +147,18 @@ def webhook():
                 continue
                 
             try:
-                print(f"Reviewing {file.filename}")
-                # Get file content
-                file_content = base64.b64decode(
-                    repo.get_contents(file.filename, ref=pull.head.sha).content
-                ).decode('utf-8')
+                print(f"Reviewing changes in {file.filename}")
                 
-                # Analyze code
-                review_comment = analyze_code(file_content, file.filename)
+                # Get only the changed portions using the patch
+                if file.patch:
+                    # Extract the changed code from the patch
+                    changes = f"Changes (patch):\n{file.patch}"
+                else:
+                    print(f"No patch available for {file.filename}")
+                    continue
+                
+                # Analyze only the changes
+                review_comment = analyze_code(changes, file.filename)
                 reviews.append(f"### Review for `{file.filename}`:\n\n{review_comment}\n\n---\n\n")
                 
             except Exception as e:
