@@ -41,7 +41,12 @@ def verify_webhook(request):
         hashlib.sha256
     ).hexdigest()
     
-    return hmac.compare_digest(signature, expected_signature)
+    if not hmac.compare_digest(signature, expected_signature):
+        print("❌ Webhook signature mismatch")
+        return False
+
+    print("✅ Webhook signature verified successfully")
+    return True
 
 def get_github_client(installation_id):
     if not GITHUB_APP_ID or not GITHUB_PRIVATE_KEY:
