@@ -145,10 +145,6 @@ def webhook():
         
         # Get changed files
         for file in pull.get_files():
-            if not file.filename.endswith(('.py', '.js', '.ts', '.tsx', '.jsx', '.vue', '.go', '.java', '.rb')):
-                print(f"Skipping {file.filename} - unsupported file type")
-                continue
-                
             try:
                 print(f"Reviewing changes in {file.filename}")
                 
