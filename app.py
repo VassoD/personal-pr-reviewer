@@ -172,8 +172,12 @@ def webhook():
         if reviews:
             # Combine all reviews into a single comment
             combined_review = "# Code Review Summary\n\n" + "".join(reviews)
-            pull.create_issue_comment(combined_review)
-            print("Posted review comment")
+            print("Attempting to post review:", combined_review)
+            try:
+                pull.create_issue_comment(combined_review)
+                print("Posted review comment")
+            except Exception as e:
+                print(f"Error posting comment: {str(e)}")
 
         return jsonify({'status': 'success'}), 200
         
