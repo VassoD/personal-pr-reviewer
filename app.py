@@ -18,6 +18,7 @@ app = Flask(__name__)
 # this is a comment to trigger PR review 
 # fixed mistral api key in render env variables
 # lets see if the model will focus only on the changes in the PR
+# lets see if the model will focus only on the added comments
 
 # GitHub App credentials
 GITHUB_APP_ID = os.getenv('GITHUB_APP_ID')
