@@ -25,6 +25,8 @@ MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
 
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 
+# comment to trigger PR review
+
 def verify_webhook(request):
     signature = request.headers.get('X-Hub-Signature-256')
     if not signature:
