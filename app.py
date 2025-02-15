@@ -21,13 +21,6 @@ GITHUB_PRIVATE_KEY = os.getenv('GITHUB_PRIVATE_KEY')
 GITHUB_WEBHOOK_SECRET = os.getenv('GITHUB_WEBHOOK_SECRET')
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
 
-# Print configuration for debugging (remove in production)
-print("App Configuration:")
-print(f"APP_ID: {GITHUB_APP_ID}")
-print(f"WEBHOOK_SECRET: {'Set' if GITHUB_WEBHOOK_SECRET else 'Not Set'}")
-print(f"PRIVATE_KEY: {'Set' if GITHUB_PRIVATE_KEY else 'Not Set'}")
-print(f"MISTRAL_API_KEY: {'Set' if MISTRAL_API_KEY else 'Not Set'}")
-
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 
 def verify_webhook(request):
