@@ -68,99 +68,97 @@ def get_github_client(installation_id):
 def analyze_code(file_changes, file_name):
     if not MISTRAL_API_KEY:
         return "Error: Mistral API key not configured"
-        
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {MISTRAL_API_KEY}"
-    }
-    
-    # Truncate file changes if too long
-    max_changes_length = 4000
-    if len(file_changes) > max_changes_length:
-        file_changes = file_changes[:max_changes_length] + "\n... (truncated for length)"
-    
-    system_prompt = """You are an expert software developer conducting code reviews.
-    You will be shown a git patch/diff of code changes.
-    Lines starting with '+' are additions and lines starting with '-' are deletions.
-    ONLY review the specific changes shown in the diff - do not make assumptions about other parts of the code.
-    Provide concise, actionable feedback focusing on code quality, best practices, and potential improvements.
-    Format your review in clear sections for positive aspects and suggestions.
-    Keep your response brief and focused."""
-    
-    user_prompt = f"""Review these specific changes in {file_name}:
 
-The following shows the git diff of changes made:
+    try:
+        # If file is too large, return early with a message
+        if len(file_changes) > 10000:  # Conservative limit
+            return "File changes too large for detailed review. Key changes include modifications to code structure and functionality."
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {MISTRAL_API_KEY}"
+        }
+        
+        # Aggressively truncate file changes
+        max_changes_length = 3000  # More conservative limit
+        if len(file_changes) > max_changes_length:
+            # Count the number of changes
+            change_lines = [line for line in file_changes.split('\n') if line.startswith('+') or line.startswith('-')]
+            total_changes = len(change_lines)
+            
+            truncated_changes = file_changes[:max_changes_length]
+            truncated_changes = truncated_changes[:truncated_changes.rindex('\n')]  # Cut at last complete line
+            truncated_changes += f"\n... (truncated, {total_changes} total changes)"
+            file_changes = truncated_changes
+
+        system_prompt = """You are an expert software developer conducting code reviews.
+        Provide a VERY BRIEF review focusing only on the most important aspects.
+        Format your review in clear sections for positive aspects and suggestions."""
+
+        user_prompt = f"""Review these changes in {file_name}:
 {file_changes}
 
-Focus ONLY on analyzing the changed lines (marked with + or -) for:
-1. Good practices and improvements implemented
-2. Potential issues or areas for improvement
-3. Security concerns if any
-4. Performance considerations
+Provide a BRIEF review with:
+1. Positive points (2-3 only)
+2. Key suggestions (2-3 only)
+3. One-line summary"""
 
-Provide your review in this format:
-1. Positive points: [Brief list of good implementations in the changes]
-2. Key suggestions: [Prioritized list of improvements for the changes]
-3. Code example: [If applicable, show a brief example of suggested improvement]
-4. Summary: [One-line overview of the specific changes made]"""
-
-    data = {
-        "model": "mistral-large-latest",
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ],
-        "max_tokens": 800,
-        "temperature": 0.7
-    }
-    
-    try:
-        print(f"Sending request to Mistral API for {file_name}")
-        
-        response = requests.post(
-            MISTRAL_API_URL, 
-            headers=headers, 
-            json=data,
-            timeout=30  # 30 seconds timeout
-        )
-        
-        print(f"Got response from Mistral API for {file_name}")
-        print(f"Response status code: {response.status_code}")
+        data = {
+            "model": "mistral-large-latest",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            "max_tokens": 500,  # Reduced token limit
+            "temperature": 0.7
+        }
         
         try:
-            response.raise_for_status()
-            response_json = response.json()
+            print(f"Sending request to Mistral API for {file_name}")
             
-            if not response_json.get("choices"):
-                print("No choices in response")
-                return "Error: Invalid response from code analysis service"
+            response = requests.post(
+                MISTRAL_API_URL, 
+                headers=headers, 
+                json=data,
+                timeout=20  # Reduced timeout
+            )
+            
+            print(f"Got response from Mistral API for {file_name}")
+            print(f"Response status code: {response.status_code}")
+            
+            try:
+                response.raise_for_status()
+                response_json = response.json()
                 
-            review = response_json["choices"][0]["message"]["content"]
-            
-            # Truncate review if too long
-            max_review_length = 3000
-            if len(review) > max_review_length:
-                review = review[:max_review_length] + "\n... (truncated for length)"
+                if not response_json.get("choices"):
+                    return "Error: Invalid response from code analysis service"
+                    
+                review = response_json["choices"][0]["message"]["content"]
                 
-            return review
+                # Strictly limit review length
+                max_review_length = 2000
+                if len(review) > max_review_length:
+                    review = review[:max_review_length] + "\n... (truncated)"
+                    
+                return review
+                
+            except ValueError as json_err:
+                print(f"JSON parsing error: {str(json_err)}")
+                return "Error: Invalid response format from code analysis service"
+                
+        except requests.exceptions.Timeout:
+            print(f"Timeout while analyzing {file_name}")
+            return "Error: Analysis timeout - file may be too complex"
             
-        except ValueError as json_err:
-            print(f"JSON parsing error: {str(json_err)}")
-            return "Error: Invalid response format from code analysis service"
+        except requests.exceptions.RequestException as e:
+            print(f"Request error in analyze_code: {str(e)}")
+            return f"Error analyzing code: Request failed"
             
-    except requests.exceptions.Timeout:
-        print(f"Timeout while analyzing {file_name}")
-        return "Error: Code analysis service timeout"
-        
-    except requests.exceptions.RequestException as e:
-        print(f"Request error in analyze_code: {str(e)}")
-        return f"Error analyzing code: Request failed"
-        
     except Exception as e:
         print(f"Unexpected error in analyze_code: {str(e)}")
         print(f"Error type: {type(e)}")
         print(f"Traceback: {traceback.format_exc()}")
-        return "Error: Unexpected error during code analysis"
+        return "Error: Unable to complete code analysis"
 
 def get_last_review_timestamp(pull):
     """Get timestamp of the last review comment by the bot"""
@@ -202,18 +200,14 @@ def webhook():
         print("Headers:", dict(request.headers))
         
         if not verify_webhook(request):
-            print("Webhook verification failed")
             return jsonify({'error': 'Invalid signature'}), 403
 
         event = request.headers.get('X-GitHub-Event')
-        print(f"Event type: {event}")
-        
         if event != 'pull_request':
             return jsonify({'status': 'skipped', 'reason': f'Event {event} not handled'}), 200
 
         payload = request.json
         action = payload['action']
-        print(f"Action: {action}")
         
         if action not in ['opened', 'synchronize']:
             return jsonify({'status': 'skipped', 'reason': f'Action {action} not handled'}), 200
@@ -223,9 +217,7 @@ def webhook():
             repo_name = payload['repository']['full_name']
             pr_number = payload['pull_request']['number']
             
-            print(f"\n=== Processing PR ===")
-            print(f"Repository: {repo_name}")
-            print(f"PR Number: {pr_number}")
+            print(f"\n=== Processing PR #{pr_number} in {repo_name} ===")
             
             gh = get_github_client(installation_id)
             repo = gh.get_repo(repo_name)
@@ -260,27 +252,29 @@ def webhook():
                 commit_shas = [commit.sha[:7] for commit in new_commits]
                 review_header = f"# Code Review for Latest Changes\nReviewing commits: {', '.join(commit_shas)}\n\n"
             
-            # Process files in smaller batches
-            batch_size = 3
-            for i in range(0, len(files_to_review), batch_size):
-                batch = files_to_review[i:i + batch_size]
-                
-                for file in batch:
-                    try:
-                        if not file.patch:
-                            continue
-                            
-                        changes = "```diff\n" + file.patch + "\n```"
-                        review_comment = analyze_code(changes, file.filename)
+            # Sort files by size and limit total files if needed
+            files_to_review.sort(key=lambda x: len(x.patch) if x.patch else 0)
+            if len(files_to_review) > 5:  # Limit number of files per review
+                files_to_review = files_to_review[:5]
+                review_header += "_Note: Only reviewing the 5 smallest changed files._\n\n"
+            
+            # Process one file at a time
+            for file in files_to_review:
+                try:
+                    if not file.patch:
+                        continue
                         
-                        if review_comment.startswith("Error:"):
-                            review_errors.append(f"Error reviewing `{file.filename}`: {review_comment}")
-                        else:
-                            reviews.append(f"### Review for `{file.filename}`:\n\n{review_comment}\n\n---\n\n")
-                            
-                    except Exception as e:
-                        print(f"Error processing {file.filename}: {str(e)}")
-                        review_errors.append(f"Error reviewing `{file.filename}`: {str(e)}")
+                    changes = "```diff\n" + file.patch + "\n```"
+                    review_comment = analyze_code(changes, file.filename)
+                    
+                    if review_comment.startswith("Error:"):
+                        review_errors.append(f"Error reviewing `{file.filename}`: {review_comment}")
+                    else:
+                        reviews.append(f"### Review for `{file.filename}`:\n\n{review_comment}\n\n---\n\n")
+                        
+                except Exception as e:
+                    print(f"Error processing {file.filename}: {str(e)}")
+                    review_errors.append(f"Error reviewing `{file.filename}`: {str(e)}")
 
             if reviews or review_errors:
                 combined_review = review_header
@@ -291,17 +285,24 @@ def webhook():
                 if review_errors:
                     combined_review += "\n### Review Errors:\n" + "\n".join(review_errors)
                 
+                # Ensure the comment isn't too long
+                if len(combined_review) > 65000:
+                    combined_review = combined_review[:65000] + "\n\n... (Review truncated due to length)"
+                
                 try:
-                    print("Posting review comment...")
                     pull.create_issue_comment(combined_review)
                     print("Successfully posted review")
                 except Exception as e:
                     print(f"Error posting comment: {str(e)}")
-                    # Try posting a shorter version if the comment is too long
-                    if len(combined_review) > 65536:  # GitHub's comment length limit
-                        truncated_review = combined_review[:65000] + "\n\n... (Review truncated due to length)"
-                        pull.create_issue_comment(truncated_review)
-                        print("Posted truncated review")
+                    # If we still can't post, try an even shorter version
+                    try:
+                        short_review = review_header + "\nReview too large to post. Summary of files reviewed:\n"
+                        for file in files_to_review:
+                            short_review += f"- {file.filename}\n"
+                        pull.create_issue_comment(short_review)
+                        print("Posted short review summary")
+                    except Exception as e2:
+                        print(f"Error posting short review: {str(e2)}")
 
             return jsonify({'status': 'success'}), 200
             
