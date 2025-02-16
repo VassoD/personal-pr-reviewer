@@ -9,6 +9,7 @@ import base64
 from github import GithubIntegration
 import requests
 from dotenv import load_dotenv
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -107,6 +108,26 @@ Provide your review in this format:
         print(f"Error in analyze_code: {str(e)}")
         return f"Error analyzing code: {str(e)}"
 
+def get_last_review_timestamp(pull):
+    """Get timestamp of the last review comment by the bot"""
+    try:
+        comments = pull.get_issue_comments()
+        for comment in reversed(list(comments)):
+            if comment.user.type == 'Bot' and ('Code Review for Latest Changes' in comment.body or 'Initial Code Review for PR' in comment.body):
+                return comment.created_at
+        return None
+    except Exception as e:
+        print(f"Error getting last review timestamp: {str(e)}")
+        return None
+
+def get_files_from_commits(commits):
+    """Get all unique files changed in the given commits"""
+    files_changed = set()
+    for commit in commits:
+        for file in commit.files:
+            files_changed.add(file.filename)
+    return files_changed
+
 @app.route('/webhook', methods=['POST'])
 def webhook():
     print("Received webhook")
@@ -143,20 +164,51 @@ def webhook():
         # Store all reviews to post a single combined comment
         reviews = []
         
-        # Get changed files
-        for file in pull.get_files():
+        if action == 'opened':
+            # For new PRs, review all files
+            files_to_review = pull.get_files()
+            commits = list(pull.get_commits())
+            commit_shas = [c.sha[:7] for c in commits]
+            review_header = f"# Initial Code Review for PR\nReviewing all commits: {', '.join(commit_shas)}\n\n"
+        else:  # 'synchronize'
+            # Get the timestamp of our last review
+            last_review_time = get_last_review_timestamp(pull)
+            
+            # Get all commits since the last review
+            all_commits = list(pull.get_commits())
+            if last_review_time:
+                new_commits = [
+                    commit for commit in all_commits
+                    if commit.commit.author.date > last_review_time
+                ]
+            else:
+                # If we can't find the last review, just take the latest commit
+                new_commits = [all_commits[-1]]
+            
+            # Get all files changed in new commits
+            latest_files = get_files_from_commits(new_commits)
+            
+            # Filter PR files to only those changed in new commits
+            files_to_review = [
+                file for file in pull.get_files()
+                if file.filename in latest_files
+            ]
+            
+            # Create header with all new commit SHAs
+            commit_shas = [commit.sha[:7] for commit in new_commits]
+            review_header = f"# Code Review for Latest Changes\nReviewing commits: {', '.join(commit_shas)}\n\n"
+            
+        # Review the files
+        for file in files_to_review:
             try:
                 print(f"Reviewing changes in {file.filename}")
                 
-                # Get only the changed portions using the patch
                 if file.patch:
-                    # Format the changes to emphasize the diff
                     changes = "```diff\n" + file.patch + "\n```"
                 else:
                     print(f"No patch available for {file.filename}")
                     continue
                 
-                # Analyze only the changes
                 review_comment = analyze_code(changes, file.filename)
                 reviews.append(f"### Review for `{file.filename}`:\n\n{review_comment}\n\n---\n\n")
                 
@@ -165,8 +217,7 @@ def webhook():
                 reviews.append(f"Error reviewing `{file.filename}`: {str(e)}\n\n---\n\n")
 
         if reviews:
-            # Combine all reviews into a single comment
-            combined_review = "# Code Review Summary\n\n" + "".join(reviews)
+            combined_review = review_header + "".join(reviews)
             print("Attempting to post review:", combined_review)
             try:
                 pull.create_issue_comment(combined_review)
