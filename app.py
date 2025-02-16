@@ -15,6 +15,8 @@ import traceback
 # Load environment variables
 load_dotenv()
 
+# comment to trigger PR review 3
+
 app = Flask(__name__)
 
 # GitHub App credentials
@@ -24,6 +26,8 @@ GITHUB_WEBHOOK_SECRET = os.getenv('GITHUB_WEBHOOK_SECRET')
 MISTRAL_API_KEY = os.getenv('MISTRAL_API_KEY')
 
 MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+
+# comment to trigger PR review
 
 def verify_webhook(request):
     signature = request.headers.get('X-Hub-Signature-256')
